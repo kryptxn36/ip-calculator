@@ -19,82 +19,94 @@ To do:
     [x] - make proper IPv6 calculation algorithms for:
         [x] - subnet
         [x] - min/max values
-    [ ] - create support for abbreviated input and output formats
+    [ ] - create support for abbreviated
+        [x] - input
+        [ ] - output
 --------------------------------------------v3--------------------------------------------
 [ ] - create GUI
 '''
 
-def main():
-    def toBinary(num):
-        return bin(int(num)).replace("0b", "")
 
-    def ipv4(m):
+def toBinary(num):
+    return bin(int(num)).replace("0b", "")
+
+def ipv4(m):
+    s = []
+    wildcard = []
+    m = int(m)
+    for i in range(m):
+        s.append('1')
+
+    for i in range(32 - m):
+        s.append('0')
+    
+    for i in range(len(s)):
+        wildcard.append(s[i])
+        
+    for i in range(32):
+        if wildcard[i] == '1':
+            wildcard[i] = '0'
+        elif wildcard[i] == '0':
+            wildcard[i] = '1'
+
+    for i in range(3):
+        wildcard = [a + b for a, b in zip(wildcard[::2], wildcard[1::2])]
+    
+    for i in range(3):
+        s = [a + b for a, b in zip(s[::2], s[1::2])]
+
+    for i in range(len(s)):
+        wildcard[i] = int(wildcard[i], 2)
+        s[i] = int(s[i], 2)
+    
+    n = 32 - int(m)
+    mask = list(map(int, s))
+    wildcard = list(map(int, wildcard))
+    return mask, wildcard, n
+
+def ipv6(m):
         s = []
         wildcard = []
         m = int(m)
+        
         for i in range(m):
             s.append('1')
-
-        for i in range(32 - m):
-            s.append('0')
         
+        for i in range(128 - m):
+            s.append('0')
+
         for i in range(len(s)):
             wildcard.append(s[i])
-            
-        for i in range(32):
+
+        for i in range(128):
             if wildcard[i] == '1':
                 wildcard[i] = '0'
             elif wildcard[i] == '0':
                 wildcard[i] = '1'
-
-        for i in range(3):
+        
+        for i in range(4):
             wildcard = [a + b for a, b in zip(wildcard[::2], wildcard[1::2])]
         
-        for i in range(3):
+        for i in range(4):
             s = [a + b for a, b in zip(s[::2], s[1::2])]
 
         for i in range(len(s)):
             wildcard[i] = int(wildcard[i], 2)
             s[i] = int(s[i], 2)
-        
-        n = 32 - int(m)
         mask = list(map(int, s))
-        wildcard = list(map(int, wildcard))
+        n = 128 - int(m)
         return mask, wildcard, n
-     
-    def ipv6(m):
-            s = []
-            wildcard = []
-            m = int(m)
-            
-            for i in range(m):
-                s.append('1')
-            
-            for i in range(128 - m):
-                s.append('0')
 
-            for i in range(len(s)):
-                wildcard.append(s[i])
+def abbreviatedInput(addr):
+    zeros = 8 - addr.count(":")
+    if addr[-1] == ':':
+        addr += '0'
+    addr = addr.split(":")
+    addr[addr.index(""):addr.index("")] = ['0'] * zeros
+    addr.remove("")
+    return addr
 
-            for i in range(128):
-                if wildcard[i] == '1':
-                    wildcard[i] = '0'
-                elif wildcard[i] == '0':
-                    wildcard[i] = '1'
-            
-            for i in range(4):
-                wildcard = [a + b for a, b in zip(wildcard[::2], wildcard[1::2])]
-            
-            for i in range(4):
-                s = [a + b for a, b in zip(s[::2], s[1::2])]
-
-            for i in range(len(s)):
-                wildcard[i] = int(wildcard[i], 2)
-                s[i] = int(s[i], 2)
-            mask = list(map(int, s))
-            n = 128 - int(m)
-            return mask, wildcard, n
-    
+def main():
     format = False
     while format == False:
         try:
@@ -115,7 +127,7 @@ def main():
             else: print("Incorrect IPv4 address format!")
         else:
             if re.search(r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))', ip) != None:
-                ip = ip.split(":")
+                ip = abbreviatedInput(ip)
                 format = True
             else: print("Incorrect IPv6 address format!")
 
