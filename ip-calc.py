@@ -10,7 +10,7 @@ To do:
 [x] - create user input check (formats of IP and subnet mask)
 [x] - create try-except blocks
 --------------------------------------------v2--------------------------------------------
-[ ] - create support for IPv6 format addresses:
+[x] - create support for IPv6 format addresses:
     [x] - make mode selection (IPv4 / IPv6)
     [x] - change user input check if the IPv6 mode is selected
     [x] - rewrite a block of code calculating the number of hosts
@@ -22,11 +22,10 @@ To do:
     [x] - create support for abbreviated:
         [x] - input
         [x] - output
-    [ ] - make an option to switch between abbreviated and unabbreviated output
+    [x] - output both abbreviated and unabbreviated IP addresses
 --------------------------------------------v3--------------------------------------------
 [ ] - create GUI
 '''
- 
  
 def toBinary(num):
     return bin(int(num)).replace("0b", "")
@@ -75,7 +74,7 @@ def ipv6(m):
         
         for i in range(128 - m):
             s.append('0')
- 
+        
         for i in range(len(s)):
             wildcard.append(s[i])
  
@@ -113,6 +112,8 @@ def abbreviatedIn(addr):
     return addr
  
 def abbreviatedOut(addr):
+    if '0' not in addr:
+        return addr
     index1 = None
     index2 = None
     counter1 = 0
@@ -125,7 +126,6 @@ def abbreviatedOut(addr):
             if index1 + counter1 < 8 and addr[index1 + counter1] != '0':
                 break
             
- 
     revAddr = list(reversed(addr))
     for hxt in revAddr:
         if hxt == '0':
@@ -145,9 +145,11 @@ def abbreviatedOut(addr):
         for i in range(counter1):
             addr.pop(index1)
         addr.insert(index1, '')
+    
+    if len(addr) < 8:
+        addr.append('')
         return addr
-
-     
+    return addr
 
 def main():
     format = False
@@ -237,26 +239,20 @@ def main():
     
     minAddr = list(map(str, minBuffer))
     maxAddr = list(map(str, maxBuffer))
-    #ip = abbreviatedOut(':'.join(ip).replace('0x', ''))
+
     if mode == 1: 
         ip = list(map(str, ip))
         network = list(map(str, network))
         wildcard = list(map(str, wildcard))
         broadcast = list(map(str, broadcast))
-    elif mode == 2:
+    else:
         wildcard = list(map(hex, wildcard))
         for i in range(8):
             ip[i] = ip[i].replace('0x', '')
             network[i] = network[i].replace('0x', '')
             minAddr[i] = minAddr[i].replace('0x', '')
             maxAddr[i] = maxAddr[i].replace('0x', '')
-            wildcard[i] = wildcard[i].replace('0x', '')
-        ip = abbreviatedOut(ip)
-        network = abbreviatedOut(network)
-        minAddr = abbreviatedOut(minAddr)
-        maxAddr = abbreviatedOut(maxAddr)
-        wildcard = abbreviatedOut(wildcard)
-     
+
     if mode == 1:
         print(f"\n\
     ----SUMMARY----\n\
@@ -270,13 +266,13 @@ def main():
     else:
         print(f"\n\
     ----SUMMARY----\n\
--Host IP: {':'.join(ip).replace('0x', '')} \n\
--Subnet: {':'.join(network).replace('0x', '')}\n\
--Number of usable hosts: {hosts}\n\
--Wildcard: {':'.join(wildcard).replace('0x', '')}\n\
--Min host address: {':'.join(minAddr).replace('0x', '')}\n\
--Max host address: {':'.join(maxAddr).replace('0x', '')}")
- 
+Unabbreviated | Abbreviated\n\
+-Host IP: {':'.join(ip)} | {':'.join(abbreviatedOut(ip))}\n\
+-Subnet: {':'.join(network)} | {':'.join(abbreviatedOut(network))}\n\
+-Min host address: {':'.join(minAddr)} | {':'.join(abbreviatedOut(minAddr))}\n\
+-Max host address: {':'.join(maxAddr)} | {':'.join(abbreviatedOut(maxAddr))}\n\
+-Number of usable hosts: {hosts}")
+
     choice = input("[r]estart, [E]xit: ")
     if choice == 'r' or choice == 'R':
         main()
