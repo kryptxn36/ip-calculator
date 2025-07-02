@@ -1,284 +1,175 @@
-import re
-'''
-To do:
---------------------------------------------v1--------------------------------------------
-[x] - add broadcast address
-[x] - add min-max IP addresses
-[x] - figure out wtf happened to lists now being stiffly connected between each other :/ 
-*it had to do with list being one of the mutable data types in python
-[x] - make it possible to calculate a number of hosts with any subnet mask format
-[x] - create user input check (formats of IP and subnet mask)
-[x] - create try-except blocks
---------------------------------------------v2--------------------------------------------
-[x] - create support for IPv6 format addresses:
-    [x] - make mode selection (IPv4 / IPv6)
-    [x] - change user input check if the IPv6 mode is selected
-    [x] - rewrite a block of code calculating the number of hosts
-    [x] - make a subnet mask format conversion from CIDR to a dot-decimal one
-    [x] - convert every element from hexadecimal string to a decimal value
-    [x] - make proper IPv6 calculation algorithms for:
-        [x] - subnet
-        [x] - min/max values
-    [x] - create support for abbreviated:
-        [x] - input
-        [x] - output
-    [x] - output both abbreviated and unabbreviated IP addresses
---------------------------------------------v3--------------------------------------------
-[ ] - create GUI
-'''
- 
-def toBinary(num):
-    return bin(int(num)).replace("0b", "")
- 
-def ipv4(m):
-    s = []
-    wildcard = []
-    m = int(m)
-    for i in range(m):
-        s.append('1')
- 
-    for i in range(32 - m):
-        s.append('0')
+# Импорт необходимых модулей
+import ipaddress  # Для работы с IP-адресами и подсетями
+import re         # Для регулярных выражений (в текущей версии не используется, но оставлен для возможного расширения)
+
+def validate_ipv4(ip):
+    """
+    Проверяет, является ли строка валидным IPv4 адресом.
+    Args:
+        ip (str): Строка с IP-адресом
+    Returns:
+        bool: True если адрес валиден, иначе False
+    """
+    try:
+        ipaddress.IPv4Address(ip)
+        return True
+    except ValueError:
+        return False
+
+def validate_ipv6(ip):
+    """
+    Проверяет, является ли строка валидным IPv6 адресом.
+    Args:
+        ip (str): Строка с IP-адресом
+    Returns:
+        bool: True если адрес валиден, иначе False
+    """
+    try:
+        ipaddress.IPv6Address(ip)
+        return True
+    except ValueError:
+        return False
+
+def validate_mask(mask, is_ipv6=False):
+    """
+    Проверяет корректность маски подсети.
+    Args:
+        mask (str): Маска в формате CIDR (число) или точечной нотации (для IPv4)
+        is_ipv6 (bool): Флаг IPv6 (влияет на максимальное значение маски)
+    Returns:
+        bool: True если маска валидна, иначе False
+    """
+    max_mask = 128 if is_ipv6 else 32  # Максимальное значение маски для IPv6/IPv4
     
-    for i in range(len(s)):
-        wildcard.append(s[i])
-        
-    for i in range(32):
-        if wildcard[i] == '1':
-            wildcard[i] = '0'
-        elif wildcard[i] == '0':
-            wildcard[i] = '1'
- 
-    for i in range(3):
-        wildcard = [a + b for a, b in zip(wildcard[::2], wildcard[1::2])]
+    # Проверка числового формата CIDR
+    if mask.isdigit():
+        return 0 <= int(mask) <= max_mask
     
-    for i in range(3):
-        s = [a + b for a, b in zip(s[::2], s[1::2])]
- 
-    for i in range(len(s)):
-        wildcard[i] = int(wildcard[i], 2)
-        s[i] = int(s[i], 2)
-    
-    n = 32 - int(m)
-    mask = list(map(int, s))
-    wildcard = list(map(int, wildcard))
-    return mask, wildcard, n
- 
-def ipv6(m):
-        s = []
-        wildcard = []
-        m = int(m)
-        
-        for i in range(m):
-            s.append('1')
-        
-        for i in range(128 - m):
-            s.append('0')
-        
-        for i in range(len(s)):
-            wildcard.append(s[i])
- 
-        for i in range(128):
-            if wildcard[i] == '1':
-                wildcard[i] = '0'
-            elif wildcard[i] == '0':
-                wildcard[i] = '1'
-        
-        for i in range(4):
-            wildcard = [a + b for a, b in zip(wildcard[::2], wildcard[1::2])]
-        
-        for i in range(4):
-            s = [a + b for a, b in zip(s[::2], s[1::2])]
- 
-        for i in range(len(s)):
-            wildcard[i] = int(wildcard[i], 2)
-            s[i] = int(s[i], 2)
-        mask = list(map(int, s))
-        n = 128 - int(m)
-        return mask, wildcard, n
- 
-def abbreviatedIn(addr):
-    zeros = 8 - addr.count(":")
-    if addr[-1] == ':':
-        addr += '0'
-    addr = addr.split(":")
-    addr[addr.index(""):addr.index("")] = ['0'] * zeros
-    addr.remove('')
-    for i in range(8):
-        if addr[i] == '':
-            addr[i] = '0'
+    # Для IPv4 дополнительно проверяем точечную нотацию
+    if not is_ipv6:
+        try:
+            # Преобразуем строку маски в объект IPv4Address для валидации
+            ipaddress.IPv4Address(mask)
+            return True
+        except ValueError:
+            return False
+    return False
+
+def calculate_network_info(ip_str, mask_str, is_ipv6=False):
+    """
+    Вычисляет информацию о сети на основе IP и маски.
+    Args:
+        ip_str (str): IP-адрес в строковом формате
+        mask_str (str): Маска подсети
+        is_ipv6 (bool): Флаг IPv6
+    Returns:
+        dict: Словарь с параметрами сети или None при ошибке
+    """
+    try:
+        # Создаем объект сети в зависимости от типа IP
+        if is_ipv6:
+            ip = ipaddress.IPv6Network(f"{ip_str}/{mask_str}", strict=False)
         else:
-            continue
-    return addr
- 
-def abbreviatedOut(addr):
-    if '0' not in addr:
-        return addr
-    index1 = None
-    index2 = None
-    counter1 = 0
-    counter2 = 0
-    for hxt in addr:
-        if hxt == '0':
-            if not index1:
-                index1 = addr.index(hxt)
-            counter1 += 1
-            if index1 + counter1 < 8 and addr[index1 + counter1] != '0':
-                break
-            
-    revAddr = list(reversed(addr))
-    for hxt in revAddr:
-        if hxt == '0':
-            if not index2:
-                index2 = revAddr.index(hxt)
-            counter2 += 1
-            if index2 + counter2 < 8 and revAddr[index2 + counter2] != '0':
-                break
- 
-    if counter2 > counter1:
-        for i in range(counter2):
-            revAddr.pop(index2)
-        revAddr.insert(index2, '')
-        return list(reversed(revAddr))
- 
-    elif counter1 >= counter2:
-        for i in range(counter1):
-            addr.pop(index1)
-        addr.insert(index1, '')
-    
-    if len(addr) < 8:
-        addr.append('')
-        return addr
-    return addr
+            ip = ipaddress.IPv4Network(f"{ip_str}/{mask_str}", strict=False)
+        
+        # Основные параметры сети
+        network = ip.network_address
+        # Широковещательный адрес (для IPv6 - последний адрес сети)
+        broadcast = ip.broadcast_address if not is_ipv6 else ip.network_address + (ip.num_addresses - 1)
+        # Количество доступных адресов (для IPv4 вычитаем 2 - сеть и бродкаст)
+        hosts = ip.num_addresses - 2 if not is_ipv6 else ip.num_addresses
+        
+        # Диапазон доступных хостов
+        min_host = network + 1 if not is_ipv6 else network
+        max_host = broadcast - 1 if not is_ipv6 else broadcast
+        
+        # Wildcard маска (инвертированная маска сети)
+        wildcard = ip.hostmask
+        
+        return {
+            "network": network,
+            "broadcast": broadcast,
+            "hosts": hosts,
+            "min_host": min_host,
+            "max_host": max_host,
+            "wildcard": wildcard,
+        }
+    except ValueError as e:
+        print(f"Error: {e}")
+        return None
+
+def abbreviate_ipv6(ip_str):
+    """
+    Сокращает IPv6 адрес согласно стандартному формату.
+    Args:
+        ip_str (str): IPv6 адрес в строковом формате
+    Returns:
+        str: Сокращенная форма адреса
+    """
+    try:
+        ip = ipaddress.IPv6Address(ip_str)
+        return ip.compressed
+    except ValueError:
+        return ip_str
 
 def main():
-    format = False
-    while format == False:
-        try:
-            mode = int(input("[1] IPv4 / [2] IPv6: "))
-            if mode == 1 or mode == 2:
-                format = True
-            else:
-                print('Incorrect option!')
-        except: print('Incorrect option!')
+    """
+    Основная функция программы - интерфейс взаимодействия с пользователем.
+    """
+    while True:
+        print("\n--- IP Subnet Calculator ---")
+        # Выбор режима работы
+        mode = input("[1] IPv4 / [2] IPv6 / [q] Quit: ").strip().lower()
         
-    format = False
-    while format == False:
-        ip = input("IP: ")
-        if mode == 1:
-            if re.search(r'^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\.(?!$)|$)){4}$', ip) != None:
-                ip = ip.split(".")
-                format = True
-            else: print("Incorrect IPv4 address format!")
-        else:
-            if re.search(r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))', ip) != None:
-                if [ip][0:1] == ['', ':'] or [ip][-1:-2] == [':', ''] or '::' in ip:
-                    ip = abbreviatedIn(ip)
-                else:
-                    ip =ip.split(':')
-                format = True
-            else: print("Incorrect IPv6 address format!")
- 
-    format = False
-    while format == False:
-        try:
-            mask = input("Subnet mask: ")
-            if mode == 1:
-                if "." in mask:
-                    if re.search(r'^(((255\.){3}(255|254|252|248|240|224|192|128+))|((255\.){2}(255|254|252|248|240|224|192|128|0+)\.0)|((255\.)(255|254|252|248|240|224|192|128|0+)(\.0+){2})|((255|254|252|248|240|224|192|128|0+)(\.0+){3}))$', mask) != None:
-                        mask = mask.split(".")
-                        mask = str(list(map(toBinary, mask)))
-                        mask = mask.count("1")
-                        n = ipv4(mask)[2]
-                        wildcard = ipv4(mask)[1]
-                        mask = ipv4(mask)[0]
-                        format = True
-                elif int(mask) in range(33):
-                    n = ipv4(mask)[2]
-                    wildcard = ipv4(mask)[1]
-                    mask = ipv4(mask)[0]
-                    format = True
-                    
+        # Выход из программы
+        if mode == 'q':
+            print("Exiting...")
+            break
+        
+        # Проверка корректности выбора режима
+        if mode not in ('1', '2'):
+            print("Invalid option! Choose 1 (IPv4) or 2 (IPv6).")
+            continue
+        
+        is_ipv6 = mode == '2'  # Флаг IPv6
+        
+        # Блок ввода IP-адреса с валидацией
+        while True:
+            ip = input("Enter IP address: ").strip()
+            if is_ipv6:
+                if validate_ipv6(ip):
+                    break
+                print("Invalid IPv6 address! Example: 2001:db8::1")
             else:
-                if int(mask) in range(129):
-                    n = ipv6(mask)[2]
-                    wildcard = ipv6(mask)[1]
-                    mask = ipv6(mask)[0]
-                    format = True
-        except:
-            print('Incorrect subnet mask format!')
-    
-    if mode == 1:
-        ip = list(map(int, ip))
-    else:
-        ip = [int(x, 16) for x in ip]
-   
-    network = [a & b for a, b in zip(ip, mask)]
-    broadcast = [a | b for a, b in zip(ip, wildcard)]
-    
-    minBuffer = []
-    maxBuffer = []
-    if mode == 1:
-        network = list(map(int, network))
-        for i in range(4):
-            minBuffer.append(network[i])
-            maxBuffer.append(broadcast[i])
-        maxBuffer[-1] = maxBuffer[-1] - 1
-        minBuffer[-1] = network[-1] + 1
-        hosts = 2 ** n - 2
-    else:
-        ip = list(map(hex, ip))
-        network = list(map(hex, network))
-        broadcast = list(map(hex, broadcast))
-        for i in range(8):
-            minBuffer.append(network[i])
-            maxBuffer.append(broadcast[i])
-        maxBuffer[-1] = maxBuffer[-1]
-        minBuffer[-1] = network[-1]
-        hosts = 2 ** n
-    
-    minAddr = list(map(str, minBuffer))
-    maxAddr = list(map(str, maxBuffer))
+                if validate_ipv4(ip):
+                    break
+                print("Invalid IPv4 address! Example: 192.168.1.1")
+        
+        # Блок ввода маски подсети с валидацией
+        while True:
+            mask = input("Enter subnet mask (CIDR or dotted format for IPv4): ").strip()
+            if validate_mask(mask, is_ipv6):
+                break
+            print(f"Invalid mask! Must be between 0 and {'128' if is_ipv6 else '32'}.")
+        
+        # Вычисление параметров сети
+        result = calculate_network_info(ip, mask, is_ipv6)
+        if not result:
+            continue
+        
+        # Вывод результатов
+        print("\n--- Network Summary ---")
+        print(f"IP Address: {ip}")
+        print(f"Subnet Mask: /{mask}" + (f" (CIDR)" if mask.isdigit() else ""))
+        print(f"Network Address: {result['network']}")
+        print(f"Wildcard Mask: {result['wildcard']}")
+        print(f"Broadcast Address: {result['broadcast']}")
+        print(f"Usable Hosts: {result['hosts']:,}")  # Форматирование с разделителями тысяч
+        print(f"Host Range: {result['min_host']} - {result['max_host']}")
+        
+        # Дополнительный вывод для IPv6
+        if is_ipv6:
+            print(f"Abbreviated IP: {abbreviate_ipv6(ip)}")
 
-    if mode == 1: 
-        ip = list(map(str, ip))
-        network = list(map(str, network))
-        wildcard = list(map(str, wildcard))
-        broadcast = list(map(str, broadcast))
-    else:
-        wildcard = list(map(hex, wildcard))
-        for i in range(8):
-            ip[i] = ip[i].replace('0x', '')
-            network[i] = network[i].replace('0x', '')
-            minAddr[i] = minAddr[i].replace('0x', '')
-            maxAddr[i] = maxAddr[i].replace('0x', '')
-
-    if mode == 1:
-        print(f"\n\
-    ----SUMMARY----\n\
--Host IP: {'.'.join(ip)} \n\
--Subnet: {'.'.join(network)}\n\
--Number of usable hosts: {hosts}\n\
--Wildcard: {'.'.join(wildcard)}\n\
--Broadcast address: {'.'.join(broadcast)}\n\
--Min host address: {'.'.join(minAddr)}\n\
--Max host address: {'.'.join(maxAddr)}")
-    else:
-        print(f"\n\
-    ----SUMMARY----\n\
-Unabbreviated | Abbreviated\n\
--Host IP: {':'.join(ip)} | {':'.join(abbreviatedOut(ip))}\n\
--Subnet: {':'.join(network)} | {':'.join(abbreviatedOut(network))}\n\
--Min host address: {':'.join(minAddr)} | {':'.join(abbreviatedOut(minAddr))}\n\
--Max host address: {':'.join(maxAddr)} | {':'.join(abbreviatedOut(maxAddr))}\n\
--Number of usable hosts: {hosts}")
-
-    choice = input("[r]estart, [E]xit: ")
-    if choice == 'r' or choice == 'R':
-        main()
-    else:
-        print("Exiting...")
-        exit()
- 
 if __name__ == "__main__":
     main()
